@@ -2,17 +2,14 @@ package pl.sda.autokomis.service;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
-import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
-import pl.sda.autokomis.model.Advertisement;
-import pl.sda.autokomis.model.AdvertisementDTO;
-import pl.sda.autokomis.model.Car;
-import pl.sda.autokomis.model.User;
+import pl.sda.autokomis.model.*;
 import pl.sda.autokomis.repository.AdvertisementRepository;
 
 import java.security.Principal;
 import java.util.*;
+import java.util.stream.Collectors;
 
 
 @Service
@@ -20,16 +17,16 @@ public class FindAdvertisementService {
 
     private AdvertisementRepository advertisementRepository;
     private MongoUserDetailsService userDetailsService;
-    private AdvertisementDTOConverterService converterService;
+    private FindCarService findCarService;
 
     @Autowired
     public FindAdvertisementService(
             AdvertisementRepository advertisementRepository,
             MongoUserDetailsService userDetailsService,
-            AdvertisementDTOConverterService converterService) {
+            FindCarService findCarService) {
         this.advertisementRepository = advertisementRepository;
         this.userDetailsService = userDetailsService;
-        this.converterService = converterService;
+        this.findCarService = findCarService;
     }
 
 
@@ -43,111 +40,28 @@ public class FindAdvertisementService {
         return advertisementRepository.getAllByUserId(user.getUserId(), pageable);
     }
 
-    public List<Advertisement> getAllAdvertisementsAsList(){
+    public List<Advertisement> getAllAdvertisementsAsList() {
         return advertisementRepository.getAllBy();
     }
 
-    public Page<Advertisement> getAllAdvertisementsByParams(Map<String, List<String>> filterParams, Pageable pageable) {
-        List<AdvertisementDTO> advertisementsDTOs
-                = converterService.convertAdvertsAndCarsToAdvertDTOsList(getAllAdvertisementsAsList());
+    public Page<Advertisement> getAllAdvertisementsByParams(Filter filter, Pageable pageable) {
 
-        Set<AdvertisementDTO> getAdvertisementsByCarModel = new HashSet<>();
-        Set<AdvertisementDTO> getAdvertisementsByCarMake = new HashSet<>();
-        Set<AdvertisementDTO> getAdvertisementsByCarColor = new HashSet<>();
-        Set<AdvertisementDTO> getAdvertisementsByCarProductionYear = new HashSet<>();
-        Set<AdvertisementDTO> getAdvertisementsByCarMinPrice = new HashSet<>();
-        Set<AdvertisementDTO> getAdvertisementsByCarMaxPrice = new HashSet<>();
+        Set<Advertisement> advertisementsByParams = advertisementRepository.getAdvertisementsByParams(
+                filter.getMinPrice(), filter.getMaxPrice(), filter.getIsSold());
 
-        List<Set<AdvertisementDTO>> singleFilterResultsList = new ArrayList<>();
+        List<Car> carsByParams = findCarService.getCarsByParams(filter);
 
-        for (AdvertisementDTO advertisementsDTO : advertisementsDTOs) {
-            for (String parameter : filterParams.keySet()) {
-                switch (parameter) {
+        List<String> carsIdsList = carsByParams.stream().map(car -> car.getCarId()).collect(Collectors.toList());
 
-                    case "model":
-                        if(!singleFilterResultsList.contains(getAdvertisementsByCarModel)){
-                            singleFilterResultsList.add(getAdvertisementsByCarModel);
-                        }
-                        for (String model : filterParams.get("model")) {
-                            if(advertisementsDTO.getCar().getModel().equalsIgnoreCase(model)){
-                                getAdvertisementsByCarModel.add(advertisementsDTO);
-                            }
-                        }
-                        break;
+        Set<Advertisement> advertisementsByCarsIds = advertisementRepository.getAllByCarsIds(carsIdsList);
 
-                    case "make":
-                        if(!singleFilterResultsList.contains(getAdvertisementsByCarMake)){
-                            singleFilterResultsList.add(getAdvertisementsByCarMake);
-                        }
-                        for(String make : filterParams.get("make")){
-                            if(advertisementsDTO.getCar().getMake().equalsIgnoreCase(make)){
-                                getAdvertisementsByCarMake.add(advertisementsDTO);
-                            }
-                        }
-                        break;
+        advertisementsByParams.retainAll(advertisementsByCarsIds);
 
-                    case "color":
-                        if(!singleFilterResultsList.contains(getAdvertisementsByCarColor)){
-                            singleFilterResultsList.add(getAdvertisementsByCarColor);
-                        }
-                        for(String color: filterParams.get("color")){
-                            if(advertisementsDTO.getCar().getColor().equalsIgnoreCase(color)){
-                                getAdvertisementsByCarColor.add(advertisementsDTO);
-                            }
-                        }
+        List<String> filteredAdvertisementIdsList = advertisementsByParams.stream()
+                .map(advertisement -> advertisement.getAdvertisementId())
+                .collect(Collectors.toList());
 
-                        break;
-
-                    case "productionYear":
-                        if(!singleFilterResultsList.contains(getAdvertisementsByCarProductionYear)){
-                            singleFilterResultsList.add(getAdvertisementsByCarProductionYear);
-                        }
-                        for(String productionYear : filterParams.get("productionYear")){
-                            if(advertisementsDTO.getCar().getProductionYear() == Integer.parseInt(productionYear)){
-                                getAdvertisementsByCarProductionYear.add(advertisementsDTO);
-                            }
-                        }
-                        break;
-                    case "priceMin":
-                        if(!singleFilterResultsList.contains(getAdvertisementsByCarMinPrice)){
-                            singleFilterResultsList.add(getAdvertisementsByCarMinPrice);
-                        }
-                        if(advertisementsDTO.getAdvertisement().getPrice()
-                                >= Integer.parseInt(filterParams.get("priceMin").get(0))){
-                            getAdvertisementsByCarMinPrice.add(advertisementsDTO);
-                        }
-                        break;
-                    case "priceMax":
-                        if(!singleFilterResultsList.contains(getAdvertisementsByCarMaxPrice)){
-                            singleFilterResultsList.add(getAdvertisementsByCarMaxPrice);
-                        }
-                        if(advertisementsDTO.getAdvertisement().getPrice()
-                                <= Integer.parseInt(filterParams.get("priceMax").get(0))){
-                            getAdvertisementsByCarMaxPrice.add(advertisementsDTO);
-                        }
-                        break;
-                    default:
-                        break;
-                }
-            }
-        }
-
-        for (Set<AdvertisementDTO> advertisementDTOs : singleFilterResultsList) {
-            singleFilterResultsList.get(0).retainAll(advertisementDTOs);
-        }
-        Set<AdvertisementDTO> resultSet = singleFilterResultsList.get(0);
-
-        List<Advertisement> listOfAllFiltersResult = new ArrayList<>();
-
-        for (AdvertisementDTO advertisementDTO : resultSet) {
-            listOfAllFiltersResult.add(advertisementDTO.getAdvertisement());
-        }
-
-        int start = pageable.getOffset();
-        int end = (start + pageable.getPageSize()) > listOfAllFiltersResult.size()
-                ? listOfAllFiltersResult.size() : (start + pageable.getPageSize());
-
-        return new PageImpl<>(listOfAllFiltersResult.subList(start, end), pageable, listOfAllFiltersResult.size());
+        return advertisementRepository.getAllByAdvertisementsIds(filteredAdvertisementIdsList, pageable);
     }
 
     public Page<Advertisement> getSoldAdvertisements(Pageable pageable) {

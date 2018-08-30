@@ -5,6 +5,7 @@ import org.springframework.data.domain.*;
 import org.springframework.web.bind.annotation.*;
 import pl.sda.autokomis.model.Advertisement;
 import pl.sda.autokomis.model.AdvertisementDTO;
+import pl.sda.autokomis.model.Filter;
 import pl.sda.autokomis.service.AdvertisementDTOConverterService;
 import pl.sda.autokomis.service.FindAdvertisementService;
 
@@ -45,15 +46,12 @@ public class DisplayAdvertisementController {
 
     }
 
-    @GetMapping("/{byFilter}")
+    @PostMapping("/byFilter")
     public Page<AdvertisementDTO> getFilteredAdvertisements(
-            @MatrixVariable(pathVar = "byFilter") Map<String, List<String>> filterParams,
-            @RequestParam Integer size,
-            @RequestParam Integer pageNumber){
+            @RequestBody Filter filter, @RequestParam Integer size, @RequestParam Integer pageNumber){
         Pageable pageable = new PageRequest(pageNumber, size);
-        Page<Advertisement> allAdvertisementsByParams
-                = findAdvertisementService.getAllAdvertisementsByParams(filterParams, pageable);
-        return converterService.convertAdvertsAndCarsToAdvertDTOsPage(allAdvertisementsByParams);
+        Page<Advertisement> filteredAdvertisement = findAdvertisementService.getAllAdvertisementsByParams(filter, pageable);
+        return converterService.convertAdvertsAndCarsToAdvertDTOsPage(filteredAdvertisement);
     }
 
 
